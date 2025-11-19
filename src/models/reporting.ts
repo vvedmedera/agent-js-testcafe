@@ -63,8 +63,8 @@ export interface LogRQ {
 
 export interface TestCafeReportDataItem {
   stepReportPortal?: TestCafeStepDefinition;
-  browserNetwork?: any;
-  browserConsole?: any;
+  browserNetwork?: BrowserNetworkInfo[];
+  browserConsole?: string[];
 }
 
 export interface TestCafeStepDefinition {
@@ -74,4 +74,11 @@ export interface TestCafeStepDefinition {
   title: string;
   status: STATUSES.FAILED | STATUSES.PASSED;
   parentId: string | null;
+}
+
+export interface BrowserNetworkInfo {
+  url: string;
+  method: string;
+  status: number;
+  responseBody: any;
 }

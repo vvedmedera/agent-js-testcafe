@@ -30,7 +30,7 @@ import {
   StartLaunchRQ,
   StartTestItemRQ,
 } from './models';
-import { TestCafeReportDataItem } from './models/reporting';
+import { BrowserNetworkInfo, TestCafeReportDataItem } from './models/reporting';
 import { getAgentInfo, getCodeRef, getConfig, getLastItem, getStartLaunchObj } from './utils';
 
 const promiseErrorHandler = (promise: Promise<any>, message = '') =>
@@ -211,6 +211,7 @@ export class Reporter {
       const errorMsg = stripAnsi(this.formatError(testRunInfo.errs[testRunInfo.errs.length - 1]));
       this.sendLogsOnFail(testRunInfo.errs, testItemId);
       this.sendStepsLogsOnFail(testRunInfo.reportData, testItemId);
+      this.sendBrowserInfoOnFail(testRunInfo.reportData, testItemId);
       descriptionWithError =
         errorMsg && (description || '').concat(`\n\`\`\`error\n${errorMsg}\n\`\`\``);
     }
@@ -320,6 +321,74 @@ export class Reporter {
           this.addRequestToPromisesQueue(finishPromise, 'Failed to finish nested step.');
         });
     }
+  }
+
+  sendBrowserInfoOnFail(
+    reportData: { [key: string]: TestCafeReportDataItem[] },
+    testItemId: string,
+  ): void {
+    const data: TestCafeReportDataItem[] = Object.values(reportData)[0];
+    if (data) {
+      const browserNetwork: BrowserNetworkInfo[] = data.find(
+        (i) => i.browserNetwork && i.browserNetwork.length > 0,
+      ).browserNetwork;
+
+      if (browserNetwork) {
+        const browserNetworkResult = browserNetwork.map((entry) => ({
+          ...entry,
+          responseBody:
+            typeof entry.responseBody === 'object'
+              ? JSON.stringify(entry.responseBody, null, 2)
+              : entry.responseBody,
+        }));
+
+        this.client.sendLog(testItemId, {
+          level: LOG_LEVELS.INFO,
+          message: `# Browser network\n\n${this.objectToMdTable(browserNetworkResult)}`,
+        });
+      }
+
+      const browserConsole: string[] = data.find(
+        (i) => i.browserConsole && i.browserConsole.length > 0,
+      ).browserConsole;
+
+      if (browserConsole) {
+        this.client.sendLog(testItemId, {
+          level: LOG_LEVELS.INFO,
+          message: `# Browser console\n\n${browserConsole.join('\n')}`,
+        });
+      }
+    }
+  }
+
+  objectToMdTable(data: any[]): string {
+    const table: any[][] = [];
+    let result = '';
+    const headerRow = Object.keys(data[0]);
+    if (!data.length || !headerRow.length) {
+      return result;
+    }
+
+    data.forEach((row: { [x: string]: any }) => {
+      table.push(headerRow.map((header) => row[header]));
+    });
+
+    result = '<table><thead><tr>';
+    result += headerRow
+      .map(
+        (i) =>
+          `<th>${i
+            .replace(/([A-Z])/g, ' $1')
+            .toUpperCase()
+            .trim()}</th>`,
+      )
+      .join('');
+    result += '</tr></thead><tbody>';
+    result += table
+      .map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join('')}</tr>`)
+      .join('');
+    result += '</tbody></table>';
+    return result;
   }
 
   setLaunchStatus(status: string): void {
